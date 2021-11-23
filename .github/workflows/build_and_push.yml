@@ -1,0 +1,42 @@
+on:
+  push:
+    tags:
+    - '*'
+
+name: actions-ci-ecr
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: checkout
+      uses: actions/checkout@v2
+
+    - name: determine tag
+      run: echo "RELEASE_VERSION=${GITHUB_REF#refs/*/}" >> $GITHUB_ENV
+
+    - name: configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-west-2
+
+    - name: login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v1
+
+    - name: build, tag, and push the image to Amazon ECR
+      id: build-image
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        ECR_REPOSITORY: ${{ secrets.REPO_NAME }}
+      run: |
+        # Build a docker container and push it to ECR
+        echo "building version $RELEASE_VERSION ..."
+        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$RELEASE_VERSION .
+        echo "pushing image to ECR ..."
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:$RELEASE_VERSION
+        echo "::set-output name=image::$ECR_REGISTRY/$ECR_REPOSITORY:$RELEASE_VERSION"
